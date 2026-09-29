@@ -148,6 +148,20 @@ function Logo({ size = 34 }: { size?: number }) {
   );
 }
 
+function Ticker() {
+  const items = ['PLAY CARDS', 'CALL UNO', 'STACK THE +2', 'BLOCK EVERYONE', 'WIN THE ROUND'];
+  const row = [...items, ...items];
+  return (
+    <div className="ticker" aria-hidden>
+      <div className="ticker-track">
+        {[0, 1].map(k => (
+          <span key={k}>{row.map((t, i) => <b key={i}>{t}<i>✦</i></b>)}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CardFace({ card, large = false, playable = false }: { card: Card | null; large?: boolean; playable?: boolean }) {
   if (!card) return <div className="card-empty" />;
   const sym = symbolOf(card);
@@ -315,31 +329,35 @@ function App() {
       {notice && <div className="toast" role="status"><CircleHelp size={16} />{notice}</div>}
 
       {!state && screen === 'home' && (
+        <>
         <section className="landing">
           <div className="landing-copy">
-            <div className="eyebrow"><span /> THE PREMIUM CARD TABLE</div>
-            <h1>Play cards.<br /><em>Outsmart</em><br />everyone.</h1>
-            <p>A private table, real-time rivals and a finish worth bragging about. Deal in, call it, win it.</p>
+            <div className="eyebrow"><span /> PLAYER 1 · PRESS START</div>
+            <h1>Slap cards.<br /><em>Outsmart</em><br />everyone!</h1>
+            <p>Real-time UNO with your friends or sneaky bots. Stack the +2s, call UNO and stomp the table.</p>
             <div className="landing-actions">
-              <button className="primary-button" onClick={() => setScreen('create')}><Sparkles size={17} /> CREATE GAME <ArrowRight size={17} /></button>
+              <button className="primary-button" onClick={() => setScreen('create')}><Sparkles size={20} /> PLAY NOW <ArrowRight size={20} /></button>
               <button className="secondary-button" onClick={() => setScreen('join')}>JOIN A TABLE</button>
             </div>
             <div className="landing-foot">
-              <span><Wifi size={15} /> REAL-TIME MULTIPLAYER</span>
-              <span><Bot size={16} /> SMART AI OPPONENTS</span>
-              <span><ShieldCheck size={15} /> SERVER-FAIR DEALS</span>
+              <span><Wifi size={15} /> LIVE MULTIPLAYER</span>
+              <span><Bot size={16} /> BOT BUDDIES</span>
+              <span><ShieldCheck size={15} /> FAIR DEALS</span>
             </div>
           </div>
           <div className="hero-art" aria-label="Premium cards on a game table">
             <div className="halo" />
+            <div className="burst-wrap"><div className="burst">PLAY<br />NOW!</div></div>
             <div className="hero-card hero-card-blue"><span>7</span><b>YSN UNO</b></div>
             <div className="hero-card hero-card-yellow"><span>⇄</span></div>
             <div className="hero-card hero-card-red"><span>+2</span></div>
             <div className="hero-card hero-card-wild"><span>✦</span></div>
-            <div className="floating-chip chip-top"><Zap size={12} /> YOUR MOVE</div>
+            <div className="floating-chip chip-top"><Zap size={13} /> YOUR MOVE!</div>
             <div className="floating-chip chip-bottom"><i /> 4 PLAYERS READY</div>
           </div>
         </section>
+        <Ticker />
+        </>
       )}
 
       {!state && (screen === 'create' || screen === 'join') && (
@@ -366,7 +384,7 @@ function App() {
                   <input className="range" type="range" min="1" max="5" value={aiCount} onChange={e => setAiCount(+e.target.value)} />
                   <span className="range-labels"><span>Just me</span><span>Full table</span></span>
                 </label>
-                <button className="primary-button wide" disabled={!name.trim()} onClick={create}>CREATE YOUR TABLE <ArrowRight size={17} /></button>
+                <button className="primary-button wide" disabled={!name.trim()} onClick={create}>LET'S GO! <ArrowRight size={20} /></button>
               </>
             ) : (
               <>
@@ -375,7 +393,7 @@ function App() {
                     <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} maxLength={5} placeholder="E.G. A7K2P" />
                   </div>
                 </label>
-                <button className="primary-button wide" disabled={!name.trim() || code.length < 5} onClick={join}>JOIN GAME <ArrowRight size={17} /></button>
+                <button className="primary-button wide" disabled={!name.trim() || code.length < 5} onClick={join}>JOIN GAME <ArrowRight size={20} /></button>
               </>
             )}
             <div className="form-note"><Wifi size={14} /> Private room · up to 10 players</div>
@@ -388,8 +406,8 @@ function App() {
           <div className="lobby-head">
             <div>
               <div className="eyebrow"><span /> TABLE IS OPEN</div>
-              <h2>Room lobby</h2>
-              <p className="muted">Gather your crew, then let the cards fly.</p>
+              <h2>Game lobby</h2>
+              <p className="muted">Gather your crew, then let the cards fly!</p>
             </div>
             <button className="icon-button leave" onClick={back} aria-label="Leave room"><LogOut size={17} /></button>
           </div>
@@ -404,7 +422,7 @@ function App() {
           <div className="lobby-players">
             <div className="section-heading">
               <span>PLAYERS <b>{state.players.length}<em>/10</em></b></span>
-              <span className="muted">{state.players.length < 2 ? 'Need at least 2 to start' : 'Looking good!'}</span>
+              <span className="muted">{state.players.length < 2 ? 'Need at least 2 to start' : 'Squad looks good!'}</span>
             </div>
             <div className="player-grid">
               {state.players.map((p, i) => (
