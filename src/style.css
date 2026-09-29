@@ -390,3 +390,32 @@ h1 em { font-style: italic; font-weight: 500; background: var(--gold-grad); -web
   .hand-card { flex-basis: 74px; height: 106px; margin-left: -20px; } .hand-cards { height: 138px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+
+/* ===== immersion: press feedback, shake, music indicator ===== */
+button:not(:disabled) { transition: transform .12s ease, filter .12s ease; }
+button:not(:disabled):active { transform: scale(.94); filter: brightness(1.15); }
+.hand-card:not(:disabled):active { transform: translateY(-14px) scale(1.04); }
+@keyframes shake { 0%,100% { transform: translate(0); } 15% { transform: translate(-7px,2px); } 30% { transform: translate(6px,-3px); } 45% { transform: translate(-5px,3px); } 60% { transform: translate(4px,-2px); } 80% { transform: translate(-2px,1px); } }
+.app-shell.shake { animation: shake .45s cubic-bezier(.36,.07,.19,.97); }
+.icon-button.music-on { color: #e8c66a; box-shadow: 0 0 0 1px rgba(232,198,106,.5), 0 0 16px rgba(232,198,106,.35); animation: musicpulse 1.6s ease-in-out infinite; }
+@keyframes musicpulse { 50% { box-shadow: 0 0 0 1px rgba(232,198,106,.7), 0 0 22px rgba(232,198,106,.55); } }
+
+/* ===== deal intro ===== */
+.deal-overlay { position: fixed; inset: 0; z-index: 60; background: radial-gradient(circle at 50% 45%, rgba(20,22,28,.94), rgba(5,6,8,.97)); overflow: hidden; animation: dealout .5s ease 2.7s forwards; cursor: wait; }
+@keyframes dealout { to { opacity: 0; visibility: hidden; } }
+.deal-title { position: absolute; left: 0; right: 0; top: 18%; text-align: center; font: 800 clamp(22px, 5vmin, 40px) var(--mono, monospace); letter-spacing: 6px; color: #e8c66a; }
+.deal-title span { display: block; animation: dealtext .5s ease .05s both, dealtextout .3s ease .45s forwards; }
+.deal-title b { position: absolute; left: 0; right: 0; top: 0; opacity: 0; animation: gameon .7s cubic-bezier(.2,1.4,.3,1) 2.2s forwards; text-shadow: 0 0 28px rgba(232,198,106,.7); }
+@keyframes dealtext { from { opacity: 0; transform: translateY(8px); } }
+@keyframes dealtextout { to { opacity: 0; } }
+@keyframes gameon { from { opacity: 0; transform: scale(.5); } to { opacity: 1; transform: scale(1); } }
+.deal-deck { position: absolute; left: 50%; top: 50%; width: 80px; height: 114px; margin: -57px 0 0 -40px; animation: deckshuffle .5s ease both; }
+.deal-deck .card-back { position: absolute; inset: 0; }
+@keyframes deckshuffle { 0% { transform: translateX(0) rotate(0); } 20% { transform: translateX(-26px) rotate(-6deg); } 40% { transform: translateX(26px) rotate(6deg); } 60% { transform: translateX(-16px) rotate(-3deg); } 80% { transform: translateX(10px) rotate(2deg); } 100% { transform: none; } }
+.deal-card { position: absolute; left: 50%; top: 50%; width: 76px; height: 108px; margin: -54px 0 0 -38px; opacity: 0; animation: dealfly .62s cubic-bezier(.2,.85,.25,1) forwards; animation-delay: calc(.5s + var(--i) * .16s); filter: drop-shadow(0 10px 16px rgba(0,0,0,.5)); }
+.deal-card > .face, .deal-card > .card-back { width: 100%; height: 100%; position: relative; inset: auto; }
+.deal-back { width: 46px; height: 66px; margin: -33px 0 0 -23px; }
+.deal-back .card-back { border-width: 3px; border-radius: 8px; }
+.deal-back .card-back span { font-size: 18px; }
+@keyframes dealfly { 0% { opacity: 0; transform: translate(0,0) scale(.55) rotate(0); } 12% { opacity: 1; } 100% { opacity: 1; transform: translate(var(--tx), var(--ty)) scale(1) rotate(var(--rot)); } }
+@media (max-width: 600px) { .deal-card { width: 62px; height: 88px; margin: -44px 0 0 -31px; } .deal-mine { --ty: 34vh !important; } }

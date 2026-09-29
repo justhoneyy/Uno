@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { createRoot } from 'react-dom/client';
 import { io, type Socket } from 'socket.io-client';
 import './style.css';
-import { ArrowLeft, ArrowRight, Bot, Check, ChevronDown, CircleHelp, Copy, Crown, DoorOpen, Hash, Layers, LogOut, Plus, RotateCcw, ShieldCheck, Sparkles, Volume2, VolumeX, Wifi, Zap } from 'lucide-react';
+import { Music, ArrowLeft, ArrowRight, Bot, Check, ChevronDown, CircleHelp, Copy, Crown, DoorOpen, Hash, Layers, LogOut, Plus, RotateCcw, ShieldCheck, Sparkles, Volume2, VolumeX, Wifi, Zap } from 'lucide-react';
 
 type Color = 'red' | 'blue' | 'green' | 'yellow';
 type Card = { id: string; color: Color | null; kind: 'number' | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild4'; value?: number };
@@ -12,6 +12,107 @@ type State = { code: string; players: Player[]; started: boolean; finished: bool
 type Ack = { error?: string; id?: string; code?: string; ok?: boolean };
 
 const socket: Socket = io();
+// ===== SOUND ENGINE (synthesized with Web Audio — no audio files) =====
+type Sfx = 'click' | 'hover' | 'card' | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild4' | 'draw' | 'deal' | 'uno' | 'turn' | 'error' | 'join' | 'leave' | 'start' | 'win' | 'lose' | 'penalty' | 'copy';
+const SFX = (() => {
+  let ctx: AudioContext | null = null, master: GainNode | null = null, musicGain: GainNode | null = null;
+  let enabled = true, music = false, musicTimer: ReturnType<typeof setInterval> | undefined, step = 0;
+  const ac = () => {
+    if (!ctx) { ctx = new AudioContext(); master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination); }
+    if (ctx.state === 'suspended') void ctx.resume();
+    return ctx;
+  };
+  type Opt = { type?: OscillatorType; vol?: number; to?: number; at?: number; dest?: AudioNode };
+  const tone = (f: number, dur: number, { type = 'sine', vol = 0.08, to, at = 0, dest }: Opt = {}) => {
+    const c = ac(), t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(dest ?? master!); o.start(t); o.stop(t + dur + 0.02);
+  };
+  const noise = (dur: number, freq: number, vol = 0.12, at = 0, q = 0.9) => {
+    const c = ac(), t = c.currentTime + at, len = Math.floor(c.sampleRate * dur), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master!); s.start(t);
+  };
+  const swish = (at = 0) => { noise(0.16, 2600, 0.14, at, 0.7); tone(180, 0.09, { type: 'triangle', vol: 0.09, to: 90, at: at + 0.05 }); };
+  const arp = (notes: number[], gap: number, dur: number, o: Opt = {}) => notes.forEach((n, i) => tone(n, dur, { ...o, at: (o.at ?? 0) + i * gap }));
+  const lib: Record<Sfx, () => void> = {
+    click: () => { tone(620, 0.06, { type: 'triangle', vol: 0.06, to: 420 }); },
+    hover: () => { tone(900, 0.03, { type: 'sine', vol: 0.02 }); },
+    copy: () => arp([660, 990], 0.07, 0.1, { vol: 0.06 }),
+    card: () => swish(),
+    skip: () => { swish(); tone(300, 0.25, { type: 'sawtooth', vol: 0.05, to: 120, at: 0.08 }); },
+    reverse: () => { swish(); tone(300, 0.28, { type: 'sine', vol: 0.08, to: 800, at: 0.05 }); tone(800, 0.28, { type: 'sine', vol: 0.06, to: 300, at: 0.3 }); },
+    draw2: () => { swish(); arp([330, 300], 0.11, 0.14, { type: 'square', vol: 0.05, at: 0.08 }); },
+    wild: () => { swish(); arp([523, 659, 784, 1047], 0.06, 0.16, { type: 'triangle', vol: 0.07, at: 0.05 }); },
+    wild4: () => { swish(); arp([392, 330, 262, 196], 0.09, 0.2, { type: 'sawtooth', vol: 0.06, at: 0.05 }); noise(0.4, 400, 0.15, 0.1, 0.4); },
+    draw: () => { noise(0.1, 1800, 0.1); noise(0.1, 2200, 0.1, 0.09); tone(240, 0.07, { type: 'triangle', vol: 0.06, at: 0.1 }); },
+    deal: () => { for (let i = 0; i < 7; i++) noise(0.07, 2000 + i * 120, 0.09, i * 0.075); },
+    uno: () => { arp([784, 988, 1175], 0.08, 0.2, { type: 'square', vol: 0.06 }); tone(1568, 0.4, { type: 'triangle', vol: 0.06, at: 0.26 }); },
+    turn: () => arp([659, 880], 0.09, 0.16, { type: 'sine', vol: 0.09 }),
+    error: () => { tone(200, 0.12, { type: 'square', vol: 0.05 }); tone(150, 0.16, { type: 'square', vol: 0.05, at: 0.1 }); },
+    join: () => arp([523, 784], 0.09, 0.14, { vol: 0.07 }),
+    leave: () => arp([784, 523], 0.09, 0.14, { vol: 0.06 }),
+    start: () => { noise(0.5, 900, 0.08, 0, 0.5); for (let i = 0; i < 8; i++) noise(0.09, 1800 + i * 150, 0.1, 0.5 + i * 0.16); arp([392, 523, 659, 784, 1047], 0.1, 0.3, { type: 'triangle', vol: 0.08, at: 2.4 }); },
+    win: () => { arp([523, 659, 784, 1047, 784, 1047, 1319], 0.11, 0.3, { type: 'triangle', vol: 0.09 }); arp([262, 330, 392], 0.22, 0.6, { vol: 0.06 }); },
+    lose: () => arp([392, 349, 311, 262], 0.16, 0.3, { type: 'sine', vol: 0.08 }),
+    penalty: () => { tone(220, 0.35, { type: 'sawtooth', vol: 0.06, to: 110 }); noise(0.25, 500, 0.12); },
+  };
+  const buzz = (ms: number | number[]) => { try { navigator.vibrate?.(ms); } catch { /* unsupported */ } };
+  const haptic: Partial<Record<Sfx, number | number[]>> = { card: 12, skip: 25, reverse: 25, draw2: [20, 40, 20], wild: 20, wild4: [30, 40, 30, 40, 30], turn: 30, uno: [20, 30, 60], penalty: [60, 40, 60], win: [40, 60, 40, 60, 120], error: 40, draw: 10 };
+  // soft generative pad + arpeggio loop (A minor pentatonic), started only by the music toggle
+  const beat = () => {
+    if (!music || !enabled) return;
+    const scale = [220, 261.6, 293.7, 329.6, 392, 440, 523.3];
+    const root = [110, 110, 87.3, 98][Math.floor(step / 8) % 4];
+    if (step % 8 === 0) { tone(root, 3.6, { type: 'sine', vol: 0.05, dest: musicGain! }); tone(root * 1.5, 3.6, { type: 'sine', vol: 0.025, dest: musicGain! }); }
+    if (Math.random() < 0.7) tone(scale[Math.floor(Math.random() * scale.length)], 0.9, { type: 'triangle', vol: 0.03, dest: musicGain! });
+    step++;
+  };
+  return {
+    play(name: Sfx) { if (!enabled) return; try { lib[name](); const h = haptic[name]; if (h) buzz(h); } catch { /* audio unavailable */ } },
+    setEnabled(v: boolean) { enabled = v; if (!v && ctx) void ctx.suspend(); else if (v && ctx) void ctx.resume(); },
+    setMusic(v: boolean) {
+      music = v; clearInterval(musicTimer);
+      if (!v) { if (musicGain && ctx) musicGain.gain.setTargetAtTime(0, ctx.currentTime, 0.3); return; }
+      try { const c = ac(); if (!musicGain) { musicGain = c.createGain(); musicGain.connect(master!); } musicGain.gain.setTargetAtTime(1, c.currentTime, 0.3); step = 0; beat(); musicTimer = setInterval(beat, 450); } catch { /* audio unavailable */ }
+    },
+  };
+})();
+
+// ===== DEAL INTRO: cards fly out of the deck to every seat before the round begins =====
+const DEAL_MS = 3200;
+function DealIntro({ opponents }: { opponents: number }) {
+  const cards = useMemo<Card[]>(() => {
+    const cols: Color[] = ['red', 'blue', 'green', 'yellow'], kinds: Card['kind'][] = ['skip', 'reverse', 'draw2', 'wild', 'wild4'];
+    return Array.from({ length: 7 }, (_, i) => {
+      const kind = Math.random() < 0.3 ? kinds[Math.floor(Math.random() * kinds.length)] : 'number';
+      return { id: `deal${i}`, kind, color: kind === 'wild' || kind === 'wild4' ? null : cols[Math.floor(Math.random() * 4)], value: Math.floor(Math.random() * 10) };
+    });
+  }, []);
+  const seats = Math.min(opponents, 9);
+  const backs = Array.from({ length: seats * 3 }, (_, i) => {
+    const seat = i % seats, angle = Math.PI + ((seat + 0.5) / seats) * Math.PI; // upper half circle
+    return { i, tx: Math.cos(angle) * 42, ty: Math.sin(angle) * 34, rot: (Math.random() - 0.5) * 60 };
+  });
+  return (
+    <div className="deal-overlay" role="status" aria-live="polite">
+      <div className="deal-title"><span>SHUFFLING</span><b>GAME ON!</b></div>
+      <div className="deal-deck"><div className="card-back back-3" /><div className="card-back back-2" /><div className="card-back"><span>✦</span><b>YSN</b></div></div>
+      {backs.map(b => (
+        <div key={`b${b.i}`} className="deal-card deal-back" style={{ '--i': b.i * 0.55, '--tx': `${b.tx}vmin`, '--ty': `${b.ty}vmin`, '--rot': `${b.rot}deg` } as CSSProperties}><div className="card-back"><span>✦</span></div></div>
+      ))}
+      {cards.map((c, i) => (
+        <div key={c.id} className="deal-card deal-mine" style={{ '--i': i * 0.8, '--tx': `${(i - 3) * 9}vmin`, '--ty': '36vmin', '--rot': `${(i - 3) * 5}deg` } as CSSProperties}><CardFace card={c} /></div>
+      ))}
+    </div>
+  );
+}
+
 const KEY_PLAYER = 'ysn-uno-player';
 const KEY_ROOM = 'ysn-uno-room';
 const KEY_NAME = 'ysn-uno-name';
@@ -73,8 +174,11 @@ function App() {
   const [aiCount, setAiCount] = useState(2);
   const [pending, setPending] = useState<Card | null>(null);
   const [copied, setCopied] = useState(false);
-  const [sound, setSound] = useState(true);
-  const audio = useRef<AudioContext | null>(null);
+  const [sound, setSound] = useState(localStorage.getItem('ysn-sound') !== 'off');
+  const [music, setMusic] = useState(localStorage.getItem('ysn-music') === 'on');
+  const [shake, setShake] = useState(false);
+  const [dealing, setDealing] = useState(false);
+  const prev = useRef<State | null>(null);
 
   const act = (event: string, data: Record<string, unknown> = {}) =>
     new Promise<Ack>(resolve => socket.emit(event, data, (result: Ack) => resolve(result ?? {})));
@@ -104,6 +208,48 @@ function App() {
     return () => clearTimeout(t);
   }, [notice]);
 
+  useEffect(() => { SFX.setEnabled(sound); localStorage.setItem('ysn-sound', sound ? 'on' : 'off'); }, [sound]);
+  useEffect(() => { SFX.setMusic(music); localStorage.setItem('ysn-music', music ? 'on' : 'off'); }, [music]);
+
+  // click sound on every enabled button/link (cards and the draw pile have their own sounds)
+  useEffect(() => {
+    const down = (e: PointerEvent) => {
+      const el = (e.target as HTMLElement).closest('button, a') as HTMLButtonElement | null;
+      if (el && !el.disabled && !el.classList.contains('hand-card') && !el.classList.contains('draw-pile')) SFX.play('click');
+    };
+    document.addEventListener('pointerdown', down);
+    return () => document.removeEventListener('pointerdown', down);
+  }, []);
+
+  // game sounds are driven by what changed in the server state, so everyone hears every move
+  useEffect(() => {
+    const p = prev.current; prev.current = state;
+    if (!state || !p || p.code !== state.code) return;
+    if ((!p.started && state.started) || (p.finished && !state.finished && state.started)) {
+      SFX.play('start'); setDealing(true); setTimeout(() => setDealing(false), DEAL_MS); return;
+    }
+    if (p.started && !state.started) return;
+    if (!state.started) {
+      if (state.players.length > p.players.length) SFX.play('join');
+      else if (state.players.length < p.players.length) SFX.play('leave');
+      return;
+    }
+    if (!p.finished && state.finished) {
+      const won = state.players.find(x => x.count === 0)?.id === state.you;
+      SFX.play(won ? 'win' : 'lose'); return;
+    }
+    if (state.top?.id !== p.top?.id && state.top) {
+      const k = state.top.kind;
+      SFX.play(k === 'skip' || k === 'reverse' || k === 'draw2' || k === 'wild' || k === 'wild4' ? k : 'card');
+      if (k === 'draw2' || k === 'wild4') { setShake(true); setTimeout(() => setShake(false), 500); }
+    } else if (state.drawCount < p.drawCount) SFX.play('draw');
+    if (state.message !== p.message) {
+      if (/forgot UNO/i.test(state.message)) { SFX.play('penalty'); setShake(true); setTimeout(() => setShake(false), 500); }
+      else if (/called UNO/i.test(state.message)) SFX.play('uno');
+    }
+    if (state.current === state.you && p.current !== state.you && !state.finished) setTimeout(() => SFX.play('turn'), 350);
+  }, [state]);
+
   const me = state?.players.find(p => p.id === state.you);
   const isMyTurn = state?.current === state?.you;
   const hand = me?.hand ?? [];
@@ -126,25 +272,9 @@ function App() {
     if (result.error) return setNotice(result.error);
     remember(result.id!, result.code!); setScreen('home');
   }
-  function playCue(event: string) {
-    if (!sound) return;
-    try {
-      const ctx = audio.current ?? (audio.current = new AudioContext());
-      if (ctx.state === 'suspended') void ctx.resume();
-      const osc = ctx.createOscillator(), gain = ctx.createGain();
-      const freq = event === 'uno' ? 740 : event === 'draw' ? 300 : event === 'start' ? 520 : 440;
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.72, ctx.currentTime + 0.12);
-      gain.gain.setValueAtTime(0.045, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
-      osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.14);
-    } catch { /* audio unavailable */ }
-  }
   async function doAction(event: string, data: Record<string, unknown> = {}) {
     const result = await act(event, { id: state?.you, ...data });
-    if (result.error) setNotice(result.error);
-    else if (['play', 'draw', 'uno', 'start'].includes(event)) playCue(event);
+    if (result.error) { setNotice(result.error); SFX.play('error'); }
   }
   async function play(card: Card) {
     if (isWild(card)) { setPending(card); return; }
@@ -152,17 +282,17 @@ function App() {
   }
   function back() {
     if (state) void doAction('leave');
-    setState(null); setScreen('home');
+    setState(null); setDealing(false); setScreen('home');
     localStorage.removeItem(KEY_PLAYER); localStorage.removeItem(KEY_ROOM);
     setPlayerId('');
   }
   async function copyCode() {
     await navigator.clipboard?.writeText(state?.code ?? code);
-    setCopied(true); setTimeout(() => setCopied(false), 1400);
+    SFX.play('copy'); setCopied(true); setTimeout(() => setCopied(false), 1400);
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${shake ? 'shake' : ''}`}>
       <div className="ambient" aria-hidden><i /><i /><i /></div>
 
       <header className="topbar">
@@ -174,6 +304,9 @@ function App() {
           <span className="online"><i /> LIVE TABLES</span>
           <button className="icon-button" aria-label={sound ? 'Mute sound' : 'Enable sound'} onClick={() => setSound(!sound)}>
             {sound ? <Volume2 size={17} /> : <VolumeX size={17} />}
+          </button>
+          <button className={`icon-button ${music && sound ? 'music-on' : ''}`} aria-label={music ? 'Turn music off' : 'Turn music on'} aria-pressed={music} onClick={() => { setMusic(!music); if (!sound) setSound(true); }}>
+            <Music size={17} />
           </button>
           <span className="avatar">{(me?.name || name || 'P').slice(0, 1).toUpperCase()}</span>
         </div>
@@ -374,6 +507,7 @@ function App() {
                     aria-label={`Play ${card.kind === 'number' ? card.value : card.kind}`}
                     className={`hand-card ${active && !ok ? 'dimmed' : ''} ${!active ? 'not-your-turn' : ''}`}
                     style={{ '--index': i, '--mid': (hand.length - 1) / 2 } as CSSProperties}
+                    onMouseEnter={() => { if (ok) SFX.play('hover'); }}
                     onClick={() => { if (active) void play(card); }}
                   >
                     <CardFace card={card} playable={ok} />
@@ -430,6 +564,7 @@ function App() {
         <span>© 2026 YSN UNO <i /> A LITTLE FRIENDLY COMPETITION</span>
         <span>BUILT FOR THE NEXT ROUND <Sparkles size={12} /></span>
       </footer>
+      {dealing && state?.started && <DealIntro opponents={others.length} />}
     </main>
   );
 }
