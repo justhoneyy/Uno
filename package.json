@@ -1,10 +1,25 @@
 {
-  "name": "uno-rooms",
+  "name": "ysn-uno",
+  "private": true,
   "version": "1.0.0",
-  "description": "Real-time multiplayer UNO (up to 10 players per room)",
-  "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" },
-  "dependencies": { "ws": "^8.18.0" },
-  "license": "MIT"
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "concurrently -k \"tsx watch server.ts\" \"vite --host 0.0.0.0\"",
+    "build": "vite build",
+    "start": "tsx server.ts"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "express": "^5.1.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2",
+    "vite": "^6.4.3"
+  }
 }
